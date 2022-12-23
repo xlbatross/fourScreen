@@ -1,21 +1,19 @@
-#ifndef CLIENTL_H
-#define CLIENTL_H
+#ifndef CLIENTW_H
+#define CLIENTW_H
 
 #include <string.h>
-#include <stdlib.h>
-#include <unistd.h>
-#include <arpa/inet.h>
-#include <sys/socket.h>
+#include <winsock2.h>
 #include "response.h"
+#include "request.h"
 
-class ClientL
+class ClientW
 {
 public:
-    explicit ClientL(const char * servIp = "127.0.0.1", int port = 2500);
-    ~ClientL();
+    explicit ClientW(const char * servIp = "127.0.0.1", int port = 2500);
+    ~ClientW();
 
     bool connectServer();
-    
+
     int receiveBytes(SOCKET sock, char * & rawData);
     Response *receiveData(SOCKET sock);
     Response *receiveTCP();
@@ -27,13 +25,15 @@ public:
     bool sendUDP(Request & req);
 
 private:
-    int tcpSock;
-    int udpSock;
+    WSADATA wsaData;
 
-    struct sockaddr_in servTcpAdr;
-    struct sockaddr_in servUdpAdr;
-    struct sockaddr_in fromUdpAdr;
+    SOCKET tcpSock;
+    SOCKET udpSock;
+
+    SOCKADDR_IN servTcpAdr;
+    SOCKADDR_IN servUdpAdr;
+    SOCKADDR_IN fromUdpAdr;
 
 };
 
-#endif // CLIENTL_H
+#endif // CLIENTW_H

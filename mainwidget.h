@@ -2,6 +2,9 @@
 #define MAINWIDGET_H
 
 #include <QWidget>
+#include <QMessageBox>
+#include "clientw.h"
+#include "receivethread.h"
 
 QT_BEGIN_NAMESPACE
 namespace Ui { class MainWidget; }
@@ -17,5 +20,12 @@ public:
 
 private:
     Ui::MainWidget *ui;
+
+    ClientW * client;
+
+    ReceiveThread * recvThread;
+
+private slots:
+    void responseChat(ResChat);
 };
 #endif // MAINWIDGET_H

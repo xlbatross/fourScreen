@@ -1,7 +1,9 @@
-#include "clientl.h"
+#include "clientw.h"
 
-ClientL::ClientL(const char * servIp, int port)
+ClientW::ClientW(const char * servIp, int port)
 {
+    WSAStartup(MAKEWORD(2, 2), &wsaData);
+
     tcpSock = socket(PF_INET, SOCK_STREAM, 0);
 
     memset(&servTcpAdr, 0, sizeof(servTcpAdr));
@@ -17,34 +19,37 @@ ClientL::ClientL(const char * servIp, int port)
     servUdpAdr.sin_port = htons(port + 1);
 }
 
-ClientL::~ClientL()
+ClientW::~ClientW()
 {
-    close(tcpSock);
-    close(udpSock);
+    closesocket(tcpSock);
+    closesocket(udpSock);
+    WSACleanup();
 }
 
-bool ClientL::connectServer()
+bool ClientW::connectServer()
 {
-    return (connect(tcpSock, (struct sockaddr*)&servTcpAdr, sizeof(servTcpAdr)) != -1
-            && connect(udpSock, (struct sockaddr*)&servUdpAdr, sizeof(servUdpAdr)) != -1);
+    ReqUDPConnect reqUdpConnect;
+    return (connect(tcpSock, (SOCKADDR *)&servTcpAdr, sizeof(servTcpAdr)) != SOCKET_ERROR
+         && connect(udpSock, (SOCKADDR *)&servUdpAdr, sizeof(servUdpAdr)) != SOCKET_ERROR
+         && sendUDP(reqUdpConnect));
 }
 
 // 4바이트를 먼저 읽어, 총 데이터의 길이를 파악한다
-// 총 데이터 길이는 헤더의 길이(4바이트) + 헤더 + 데이터의 길이(4바이트) + 실제 데이터
-// 헤더는 요청 응답 타입(4바이트) + 실제 데이터 하나의 길이값(4바이트) * 헤더의 길이 - 1
-int ClientL::receiveBytes(SOCKET sock, char * & rawData)
+// 총 데이터 길이는 헤더의 길이(4바이트) + 헤더 + 실제 데이터
+// 헤더는 요청 응답 타입(4바이트) + 실제 데이터 하나의 길이값(4바이트) * ((헤더의 길이 / 4바이트) - 1)
+int ClientW::receiveBytes(SOCKET sock, char * & rawData)
 {
     int totalDataSize = -1;
     char dataSizeBuffer[4];
 
-    int readBytes = read(sock, dataSizeBuffer, 4);
+    int readBytes = recv(sock, dataSizeBuffer, 4, 0);
     if (readBytes != -1)
     {
         int dataSize = *((int *)dataSizeBuffer);
         rawData = new char[dataSize];
         for (int i = 0; i < dataSize; i += 1024)
         {
-            readBytes = read(sock, rawData + i, (i + 1024 < dataSize) ? 1024 : dataSize - i);
+            readBytes = recv(sock, rawData + i, (i + 1024 < dataSize) ? 1024 : dataSize - i, 0);
             if (readBytes == -1)
             {
                 delete [] rawData;
@@ -56,7 +61,7 @@ int ClientL::receiveBytes(SOCKET sock, char * & rawData)
     return totalDataSize;
 }
 
-Response *ClientL::receiveData(SOCKET sock)
+Response *ClientW::receiveData(SOCKET sock)
 {
     char * rawData = NULL;
     int totalDataSize = receiveBytes(sock, rawData);
@@ -71,25 +76,25 @@ Response *ClientL::receiveData(SOCKET sock)
     }
 }
 
-Response *ClientL::receiveTCP()
+Response *ClientW::receiveTCP()
 {
     return receiveData(tcpSock);
 }
 
-Response *ClientL::receiveUDP()
+Response *ClientW::receiveUDP()
 {
     return receiveData(udpSock);
 }
 
-int ClientL::sendBytes(SOCKET sock, const char *totalBytes, const int totalSize)
+int ClientW::sendBytes(SOCKET sock, const char *totalBytes, const int totalSize)
 {
     int totalDataSize = -1;
-    int writeBytes = write(sock, (char *)&totalSize, sizeof(int));
+    int writeBytes = send(sock, (char *)&totalSize, sizeof(int), 0);
     if (writeBytes != -1)
     {
         for (int i = 0; i < totalSize; i += 1024)
         {
-            writeBytes = write(sock, totalBytes + i, (i + 1024 < totalSize) ? 1024 : totalSize - i);
+            writeBytes = send(sock, totalBytes + i, (i + 1024 < totalSize) ? 1024 : totalSize - i, 0);
             if (writeBytes == -1)
             {
                 return -1;
@@ -100,7 +105,7 @@ int ClientL::sendBytes(SOCKET sock, const char *totalBytes, const int totalSize)
     return totalDataSize;
 }
 
-bool ClientL::sendData(SOCKET sock, Request &req)
+bool ClientW::sendData(SOCKET sock, Request &req)
 {
     int totalDataSize = sendBytes(sock, req.TotalBytes(), req.TotalSize());
 
@@ -110,15 +115,16 @@ bool ClientL::sendData(SOCKET sock, Request &req)
         return true;
 }
 
-bool ClientL::sendTCP(Request &req)
+bool ClientW::sendTCP(Request &req)
 {
     return sendData(tcpSock, req);
 }
 
-bool ClientL::sendUDP(Request &req)
+bool ClientW::sendUDP(Request &req)
 {
     return sendData(udpSock, req);
 }
+
 
 
 

@@ -20,11 +20,20 @@ set(PROJECT_SOURCES
         mainwidget.cpp
         mainwidget.h
         mainwidget.ui
+        request.h
+        request.cpp
         response.h
         response.cpp
+        receivethread.h
+        receivethread.cpp
 )
+if (WIN32)
+    set(WINDOWS_SOURCES
+        clientw.h
+        clientw.cpp
+    )
 
-if (APPLE)
+elseif (APPLE)
     set(MAC_SOURCES
         clientl.cpp
         clientl.h
@@ -50,15 +59,20 @@ else()
     else()
         add_executable(${PROJECT_NAME}
             ${PROJECT_SOURCES}
+            ${WINDOWS_SOURCES}
             ${MAC_SOURCES}
         )
     endif()
 endif()
 
-target_link_libraries(${PROJECT_NAME} PRIVATE
+target_link_libraries(${PROJECT_NAME}
     Qt${QT_VERSION_MAJOR}::Widgets
     Qt${QT_VERSION_MAJOR}::Network # 네트워크 추가
 )
+
+if(WIN32)
+    target_link_libraries(${PROJECT_NAME} wsock32 ws2_32)
+endif()
 
 set_target_properties(${PROJECT_NAME} PROPERTIES
     MACOSX_BUNDLE_GUI_IDENTIFIER my.example.com
