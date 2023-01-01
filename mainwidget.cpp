@@ -4,13 +4,17 @@
 MainWidget::MainWidget(QWidget *parent)
     : QWidget(parent)
     , ui(new Ui::MainWidget)
-    , client(new ClientW)
-    , recvThread(new ReceiveThread(client))
+//    , client(new ClientW)
+    , clientTCP(new ClientLTCP("127.0.0.1", 2500))
+    , clientUDP(new ClientLUDP("127.0.0.1", 2501))
+    , recvThread(new ReceiveThread(clientTCP))
 {
     ui->setupUi(this);
 
-    if (client->connectServer())
+    if (clientTCP->connectServer() && clientUDP->connectServer())
     {
+        ReqUDPConnect requdp(clientUDP->sockIp(), clientUDP->sockPort());
+        clientTCP->sendData(requdp);
         qRegisterMetaType<ResChat>("ResChat");
         connect(recvThread, SIGNAL(responseChat(ResChat)), this, SLOT(responseChat(ResChat)));
         recvThread->start();
@@ -27,7 +31,8 @@ MainWidget::MainWidget(QWidget *parent)
 MainWidget::~MainWidget()
 {
     delete ui;
-    delete client;
+    delete clientTCP;
+    delete clientUDP;
     delete recvThread;
 }
 

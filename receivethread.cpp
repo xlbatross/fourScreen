@@ -1,7 +1,8 @@
 #include "receivethread.h"
 
 ReceiveThread::ReceiveThread(
-        ClientW * client,
+//        ClientW * client,
+        ClientL * client,
         QObject *parent
 )
     : client(client)
@@ -20,7 +21,8 @@ void ReceiveThread::run()
 {
     while (isRunning)
     {
-        Response * res = client->receiveUDP();
+        Response * res = NULL;
+        client->receiveData(res);
 
         if (res == NULL)
         {
@@ -32,9 +34,11 @@ void ReceiveThread::run()
         {
         case Response::Chat:
         {
-            ResChat resChat(res);
+            ResChat resChat((ResponseTCP *)res);
             emit responseChat(resChat);
         } break;
         }
+
+        delete res;
     }
 }

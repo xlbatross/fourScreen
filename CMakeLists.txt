@@ -11,6 +11,17 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# opencv
+if(WIN32)
+    set(OpenCV_DIR "C:/openCV-MinGW")
+elseif(APPLE)
+    set(OpenCV_DIR "/usr/local/Cellar/opencv/4.6.0_1/lib/cmake/opencv4")
+endif()
+
+find_package(OpenCV REQUIRED)
+include_directories(${OpenCV_INCLUDE_DIR})
+# opencv end
+
 find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets)
 find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets)
 find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Network) # 네트워크 추가
@@ -32,7 +43,6 @@ if (WIN32)
         clientw.h
         clientw.cpp
     )
-
 elseif (APPLE)
     set(MAC_SOURCES
         clientl.cpp
@@ -68,6 +78,8 @@ endif()
 target_link_libraries(${PROJECT_NAME}
     Qt${QT_VERSION_MAJOR}::Widgets
     Qt${QT_VERSION_MAJOR}::Network # 네트워크 추가
+    ${LIBOPENCV}
+    ${OpenCV_LIBRARIES}
 )
 
 if(WIN32)

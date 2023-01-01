@@ -3,7 +3,9 @@
 
 #include <QWidget>
 #include <QMessageBox>
-#include "clientw.h"
+#include <QDebug>
+//#include "clientw.h"
+#include "clientl.h"
 #include "receivethread.h"
 
 QT_BEGIN_NAMESPACE
@@ -21,7 +23,9 @@ public:
 private:
     Ui::MainWidget *ui;
 
-    ClientW * client;
+//    ClientW * client;
+    ClientLTCP * clientTCP;
+    ClientLUDP * clientUDP;
 
     ReceiveThread * recvThread;
 

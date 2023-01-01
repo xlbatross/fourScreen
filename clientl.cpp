@@ -2,123 +2,177 @@
 
 ClientL::ClientL(const char * servIp, int port)
 {
-    tcpSock = socket(PF_INET, SOCK_STREAM, 0);
-
-    memset(&servTcpAdr, 0, sizeof(servTcpAdr));
-    servTcpAdr.sin_family = AF_INET;
-    servTcpAdr.sin_addr.s_addr = inet_addr(servIp);
-    servTcpAdr.sin_port = htons(port);
-
-    udpSock = socket(PF_INET, SOCK_DGRAM, 0);
-
-    memset(&servUdpAdr, 0, sizeof(servUdpAdr));
-    servUdpAdr.sin_family = AF_INET;
-    servUdpAdr.sin_addr.s_addr = inet_addr(servIp);
-    servUdpAdr.sin_port = htons(port + 1);
+    memset(&servAdr, 0, sizeof(servAdr));
+    servAdr.sin_family = AF_INET;
+    servAdr.sin_addr.s_addr = inet_addr(servIp);
+    servAdr.sin_port = htons(port);
 }
 
 ClientL::~ClientL()
 {
-    close(tcpSock);
-    close(udpSock);
+    close(sock);
+}
+
+string ClientL::sockIp()
+{
+    char myIP[16] = {};
+    inet_ntop(AF_INET, &myAdr.sin_addr, myIP, sizeof(myIP));
+    return string(myIP, sizeof(myIP));
+}
+
+int ClientL::sockPort()
+{
+    return ntohs(myAdr.sin_port);
+}
+
+bool ClientL::setSockInfo()
+{
+    socklen_t addr_len = sizeof(myAdr);
+    memset(&myAdr, 0, sizeof(myAdr));
+    return (getsockname(sock, (struct sockaddr*)&myAdr, &addr_len) != -1);
 }
 
 bool ClientL::connectServer()
 {
-    return (connect(tcpSock, (struct sockaddr*)&servTcpAdr, sizeof(servTcpAdr)) != -1
-            && connect(udpSock, (struct sockaddr*)&servUdpAdr, sizeof(servUdpAdr)) != -1);
+    return (connect(sock, (struct sockaddr*)&servAdr, sizeof(servAdr)) != -1 && setSockInfo());
 }
 
-// 4바이트를 먼저 읽어, 총 데이터의 길이를 파악한다
-// 총 데이터 길이는 헤더의 길이(4바이트) + 헤더 + 데이터의 길이(4바이트) + 실제 데이터
-// 헤더는 요청 응답 타입(4바이트) + 실제 데이터 하나의 길이값(4바이트) * 헤더의 길이 - 1
-int ClientL::receiveBytes(SOCKET sock, char * & rawData)
+bool ClientL::sendData(Request &reqtcp)
+{
+    int totalDataSize = sendBytes(reqtcp.HeaderBytes(), reqtcp.HeaderSize(), reqtcp.DataBytes(), reqtcp.DataSize());
+
+    return (totalDataSize == -1);
+}
+
+// TCP
+
+ClientLTCP::ClientLTCP(const char * servIp, int port)
+    : ClientL(servIp, port)
+{
+    sock = socket(PF_INET, SOCK_STREAM, 0);
+}
+
+int ClientLTCP::receiveBytes(char * & rawData)
 {
     int totalDataSize = -1;
     char dataSizeBuffer[4];
-
+    // 4바이트를 먼저 읽어, 총 데이터의 길이를 파악한다
+    // 총 데이터 길이는 헤더의 길이(4바이트) + 헤더 + 실제 데이터
+    // 헤더는 요청 응답 타입(4바이트) + 실제 데이터 하나의 길이값(4바이트) * 헤더의 길이 - 1
     int readBytes = read(sock, dataSizeBuffer, 4);
+    int dataSize = *((int *)dataSizeBuffer);
     if (readBytes != -1)
     {
-        int dataSize = *((int *)dataSizeBuffer);
         rawData = new char[dataSize];
         for (int i = 0; i < dataSize; i += 1024)
         {
-            readBytes = read(sock, rawData + i, (i + 1024 < dataSize) ? 1024 : dataSize - i);
+            int packetSize = (i + 1024 < dataSize) ? 1024 : dataSize - i;
+            readBytes = read(sock, rawData + i, packetSize);
             if (readBytes == -1)
-            {
-                delete [] rawData;
                 return -1;
-            }
             totalDataSize += readBytes;
         }
     }
     return totalDataSize;
 }
 
-Response *ClientL::receiveData(SOCKET sock)
+int ClientLTCP::sendBytes(const char *headerBytes, const int headerSize, const char *dataBytes, const int dataSize)
+{
+    int totalSendSize = -1;
+    int totalSize = headerSize + dataSize;
+    int sendSize = -1;
+
+    if ((sendSize = write(sock, (char *)&totalSize, sizeof(int))) == -1)
+        return -1;
+    totalSendSize += sendSize;
+
+    if ((sendSize = write(sock, headerBytes, headerSize)) == -1)
+        return -1;
+    totalSendSize += sendSize;
+
+    if ((sendSize = write(sock, dataBytes, dataSize)) == -1)
+        return -1;
+    totalSendSize += sendSize;
+
+    return totalSendSize;
+}
+
+bool ClientLTCP::receiveData(Response * & res)
 {
     char * rawData = NULL;
-    int totalDataSize = receiveBytes(sock, rawData);
+    bool isSuccess = false;
+    int totalDataSize = receiveBytes(rawData);
 
-    if (totalDataSize == -1 && rawData == NULL)
-        return NULL;
-    else
+    if (totalDataSize != -1)
     {
-        Response * res = new Response(rawData);
+        isSuccess = true;
+        res = (Response *)(new ResponseTCP(rawData));
+    }
+    if (rawData != NULL)
         delete [] rawData;
-        return res;
-    }
+    return isSuccess;
 }
 
-Response *ClientL::receiveTCP()
+// UDP
+
+ClientLUDP::ClientLUDP(const char * servIp, int port)
+    : ClientL(servIp, port)
 {
-    return receiveData(tcpSock);
+    sock = socket(PF_INET, SOCK_DGRAM, 0);
 }
 
-Response *ClientL::receiveUDP()
+int ClientLUDP::receiveBytes(char * & rawData)
 {
-    return receiveData(udpSock);
+    int readBytes = -1;
+    int packetSize = sizeof(int) + sizeof(int) + 1024;
+
+    rawData = new char[packetSize];
+
+    readBytes = read(sock, rawData, packetSize);
+
+    return readBytes;
 }
 
-int ClientL::sendBytes(SOCKET sock, const char *totalBytes, const int totalSize)
+bool ClientLUDP::receiveData(Response * & res)
 {
-    int totalDataSize = -1;
-    int writeBytes = write(sock, (char *)&totalSize, sizeof(int));
-    if (writeBytes != -1)
+    char * rawData = NULL;
+    bool isSuccess = false;
+    int totalDataSize = receiveBytes(rawData);
+
+    if (totalDataSize != -1)
     {
-        for (int i = 0; i < totalSize; i += 1024)
-        {
-            writeBytes = write(sock, totalBytes + i, (i + 1024 < totalSize) ? 1024 : totalSize - i);
-            if (writeBytes == -1)
-            {
-                return -1;
-            }
-            totalDataSize += writeBytes;
-        }
+        isSuccess = true;
+        res = (Response *)(new ResponseUDP(rawData));
     }
-    return totalDataSize;
+    if (rawData != NULL)
+        delete [] rawData;
+    return isSuccess;
 }
 
-bool ClientL::sendData(SOCKET sock, Request &req)
+int ClientLUDP::sendBytes(const char *headerBytes, const int headerSize, const char *dataBytes, const int dataSize)
 {
-    int totalDataSize = sendBytes(sock, req.TotalBytes(), req.TotalSize());
+    int dataCount = dataSize / 1024 + ((dataSize % 1024 == 0) ? 0 : 1);
+    int packetDataSize = -1;
+    int packetSize = -1;
 
-    if (totalDataSize == -1)
-        return false;
-    else
-        return true;
+    for (int i = 0; i < dataCount; i++)
+    {
+        packetDataSize = (i < dataSize / 1024) ? 1024 : dataSize % 1024;
+        packetSize = headerSize + sizeof(int) + packetDataSize;
+
+        char * packet = new char[packetSize];
+
+        memcpy(packet, headerBytes, headerSize);
+        memcpy(packet + headerSize, (char *)&i, sizeof(int));
+        memcpy(packet + headerSize + sizeof(int) , dataBytes + (1024 * i), packetDataSize);
+
+        if (write(sock, packet, packetSize) == -1)
+            dataCount = -1;
+
+        delete [] packet;
+
+        if (dataCount == -1)
+            break;
+    }
+    return dataCount;
 }
-
-bool ClientL::sendTCP(Request &req)
-{
-    return sendData(tcpSock, req);
-}
-
-bool ClientL::sendUDP(Request &req)
-{
-    return sendData(udpSock, req);
-}
-
-
-

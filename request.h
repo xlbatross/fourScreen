@@ -3,6 +3,7 @@
 
 #include <vector>
 #include <string>
+#include <opencv2/opencv.hpp>
 
 using std::vector;
 using std::string;
@@ -10,30 +11,65 @@ using std::string;
 class Request
 {
 public:
-    enum Type {UDPConnect, Chat};
+    enum Type {UDPConnect, Chat, Image};
+    // UDPConnect = 0 tcp
+    // Chat = 1 tcp
+    // Image = 2 udp
     Request();
     ~Request();
 
-    void packaging(const int type, const vector<vector<char>> & dataBytes);
+    virtual void packaging(const int type) = 0;
 
-    const int TotalSize();
-    const char * TotalBytes();
+    const int HeaderSize();
+    const char * HeaderBytes();
+
+    const int DataSize();
+    const char * DataBytes();
 
 protected:
-    int totalSize = 0;
-    char * totalBytes = NULL;
+    vector<vector<char>> dataBytesList;
+    int headerSize = 0;
+    char * headerBytes = NULL;
+    int dataSize = 0;
+    char * dataBytes = NULL;
 };
 
-class ReqUDPConnect: public Request
+// TCP Start
+class RequestTCP : public Request
 {
 public:
-    ReqUDPConnect();
+    RequestTCP();
+    void packaging(const int type) override;
 };
 
-class ReqChat: public Request
+class ReqUDPConnect: public RequestTCP
+{
+public:
+    ReqUDPConnect(const string & servIp, const int port);
+};
+
+class ReqChat: public RequestTCP
 {
 public:
     ReqChat(const string & msg);
 };
+// TCP end
+
+// UDP start
+class RequestUDP : public Request
+{
+public:
+    RequestUDP();
+
+    void packaging(const int type) override;
+};
+
+class ReqImage : public RequestUDP
+{
+public:
+    ReqImage(const cv::Mat & img);
+};
+
+// UDP end
 
 #endif // REQUEST_H

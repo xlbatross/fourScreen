@@ -6,34 +6,51 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
+#include "request.h"
 #include "response.h"
 
 class ClientL
 {
 public:
-    explicit ClientL(const char * servIp = "127.0.0.1", int port = 2500);
+    explicit ClientL(const char * servIp, int port);
     ~ClientL();
 
-    bool connectServer();
-    
-    int receiveBytes(SOCKET sock, char * & rawData);
-    Response *receiveData(SOCKET sock);
-    Response *receiveTCP();
-    Response *receiveUDP();
+    string sockIp();
+    int sockPort();
 
-    int sendBytes(SOCKET sock, const char * totalBytes, const int totalSize);
-    bool sendData(SOCKET sock, Request & req);
-    bool sendTCP(Request & req);
-    bool sendUDP(Request & req);
+    virtual bool connectServer();
+    virtual int receiveBytes(char * & rawData) = 0;
+    virtual bool receiveData(Response * & res) = 0;
+    virtual int sendBytes(const char * headerBytes, const int headerSize, const char * dataBytes, const int dataSize) = 0;
+    virtual bool sendData(Request & req);
 
-private:
-    int tcpSock;
-    int udpSock;
+protected:
+    int sock;
+    struct sockaddr_in myAdr;
+    struct sockaddr_in servAdr;
 
-    struct sockaddr_in servTcpAdr;
-    struct sockaddr_in servUdpAdr;
-    struct sockaddr_in fromUdpAdr;
-
+    bool setSockInfo();
 };
+
+class ClientLTCP : public ClientL
+{
+public:
+    explicit ClientLTCP(const char * servIp, int port);
+
+    int receiveBytes(char * & rawData) override;
+    bool receiveData(Response * & res) override;
+    int sendBytes(const char * headerBytes, const int headerSize, const char * dataBytes, const int dataSize) override;
+};
+
+class ClientLUDP : public ClientL
+{
+public:
+    explicit ClientLUDP(const char * servIp, int port);
+
+    int receiveBytes(char * & rawData) override;
+    bool receiveData(Response * & res) override;
+    int sendBytes(const char * headerBytes, const int headerSize, const char * dataBytes, const int dataSize) override;
+};
+
 
 #endif // CLIENTL_H
