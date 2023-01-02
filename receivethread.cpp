@@ -1,8 +1,8 @@
 #include "receivethread.h"
 
 ReceiveThread::ReceiveThread(
-//        ClientW * client,
-        ClientL * client,
+        ClientW * client,
+//        ClientL * client,
         QObject *parent
 )
     : client(client)
@@ -37,6 +37,12 @@ void ReceiveThread::run()
             ResChat resChat((ResponseTCP *)res);
             emit responseChat(resChat);
         } break;
+        case Response::FirstImage:
+        case Response::SecondImage:
+        case Response::ThirdImage:
+        case Response::FourthImage:
+            emit responseImage(*(ResponseUDP *)res);
+            break;
         }
 
         delete res;

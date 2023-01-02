@@ -47,7 +47,8 @@ private:
 class ResponseUDP : public Response
 {
 public:
-    ResponseUDP(const char * rawData);
+    ResponseUDP();
+    ResponseUDP(const char * rawData, const int totalDataSize);
 
     const int SeqNum();
 

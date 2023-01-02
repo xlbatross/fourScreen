@@ -4,127 +4,187 @@ ClientW::ClientW(const char * servIp, int port)
 {
     WSAStartup(MAKEWORD(2, 2), &wsaData);
 
-    tcpSock = socket(PF_INET, SOCK_STREAM, 0);
-
-    memset(&servTcpAdr, 0, sizeof(servTcpAdr));
-    servTcpAdr.sin_family = AF_INET;
-    servTcpAdr.sin_addr.s_addr = inet_addr(servIp);
-    servTcpAdr.sin_port = htons(port);
-
-    udpSock = socket(PF_INET, SOCK_DGRAM, 0);
-
-    memset(&servUdpAdr, 0, sizeof(servUdpAdr));
-    servUdpAdr.sin_family = AF_INET;
-    servUdpAdr.sin_addr.s_addr = inet_addr(servIp);
-    servUdpAdr.sin_port = htons(port + 1);
+    memset(&servAdr, 0, sizeof(servAdr));
+    servAdr.sin_family = AF_INET;
+    servAdr.sin_addr.s_addr = inet_addr(servIp);
+    servAdr.sin_port = htons(port);
 }
 
 ClientW::~ClientW()
 {
-    closesocket(tcpSock);
-    closesocket(udpSock);
+    closesocket(sock);
     WSACleanup();
+}
+
+string ClientW::sockIp()
+{
+    string stringIP;
+    char charIP[50] = {};
+    DWORD ip_len = sizeof(charIP);
+    WSAAddressToStringA((SOCKADDR *)&myAdr, sizeof(myAdr), NULL, charIP, &ip_len);
+    for (int i = 0; i < sizeof(charIP); i++)
+    {
+        if (charIP[i] == ':')
+            break;
+        stringIP += charIP[i];
+    }
+    return stringIP;
+}
+
+int ClientW::sockPort()
+{
+    return ntohs(myAdr.sin_port);
+}
+
+bool ClientW::setSockInfo()
+{
+    int addr_len = sizeof(myAdr);
+    memset(&myAdr, 0, sizeof(myAdr));
+    return (getsockname(sock, (SOCKADDR *)&myAdr, &addr_len) != SOCKET_ERROR);
 }
 
 bool ClientW::connectServer()
 {
-    ReqUDPConnect reqUdpConnect;
-    return (connect(tcpSock, (SOCKADDR *)&servTcpAdr, sizeof(servTcpAdr)) != SOCKET_ERROR
-         && connect(udpSock, (SOCKADDR *)&servUdpAdr, sizeof(servUdpAdr)) != SOCKET_ERROR
-         && sendUDP(reqUdpConnect));
+    return (connect(sock, (SOCKADDR *)&servAdr, sizeof(servAdr)) != SOCKET_ERROR && setSockInfo());
 }
 
-// 4바이트를 먼저 읽어, 총 데이터의 길이를 파악한다
-// 총 데이터 길이는 헤더의 길이(4바이트) + 헤더 + 실제 데이터
-// 헤더는 요청 응답 타입(4바이트) + 실제 데이터 하나의 길이값(4바이트) * ((헤더의 길이 / 4바이트) - 1)
-int ClientW::receiveBytes(SOCKET sock, char * & rawData)
+bool ClientW::sendData(Request &reqtcp)
+{
+    int totalDataSize = sendBytes(reqtcp.HeaderBytes(), reqtcp.HeaderSize(), reqtcp.DataBytes(), reqtcp.DataSize());
+
+    return (totalDataSize != -1);
+}
+
+// TCP
+
+ClientWTCP::ClientWTCP(const char * servIp, int port)
+    : ClientW(servIp, port)
+{
+    sock = socket(PF_INET, SOCK_STREAM, 0);
+}
+
+int ClientWTCP::receiveBytes(char * & rawData)
 {
     int totalDataSize = -1;
     char dataSizeBuffer[4];
-
+    // 4바이트를 먼저 읽어, 총 데이터의 길이를 파악한다
+    // 총 데이터 길이는 헤더의 길이(4바이트) + 헤더 + 실제 데이터
+    // 헤더는 요청 응답 타입(4바이트) + 실제 데이터 하나의 길이값(4바이트) * 헤더의 길이 - 1
     int readBytes = recv(sock, dataSizeBuffer, 4, 0);
+    int dataSize = *((int *)dataSizeBuffer);
+    int packetSize = 0;
     if (readBytes != -1)
     {
-        int dataSize = *((int *)dataSizeBuffer);
         rawData = new char[dataSize];
         for (int i = 0; i < dataSize; i += 1024)
         {
-            readBytes = recv(sock, rawData + i, (i + 1024 < dataSize) ? 1024 : dataSize - i, 0);
-            if (readBytes == -1)
-            {
-                delete [] rawData;
+            packetSize = (i + 1024 < dataSize) ? 1024 : dataSize - i;
+            readBytes = recv(sock, rawData + i, packetSize, 0);
+            if (readBytes == SOCKET_ERROR)
                 return -1;
-            }
             totalDataSize += readBytes;
         }
     }
-    return totalDataSize;
+    return totalDataSize + 1;
 }
 
-Response *ClientW::receiveData(SOCKET sock)
+int ClientWTCP::sendBytes(const char *headerBytes, const int headerSize, const char *dataBytes, const int dataSize)
+{
+    int totalSendSize = -1;
+    int totalSize = headerSize + dataSize;
+    int sendSize = -1;
+
+    if ((sendSize = send(sock, (char *)&totalSize, sizeof(int), 0)) == SOCKET_ERROR)
+        return -1;
+    totalSendSize = sendSize;
+
+    if ((sendSize = send(sock, headerBytes, headerSize, 0)) == SOCKET_ERROR)
+        return -1;
+    totalSendSize += sendSize;
+
+    if ((sendSize = send(sock, dataBytes, dataSize, 0)) == SOCKET_ERROR)
+        return -1;
+    totalSendSize += sendSize;
+
+    return totalSendSize;
+}
+
+bool ClientWTCP::receiveData(Response * & res)
 {
     char * rawData = NULL;
-    int totalDataSize = receiveBytes(sock, rawData);
+    bool isSuccess = false;
+    int totalDataSize = receiveBytes(rawData);
 
-    if (totalDataSize == -1 && rawData == NULL)
-        return NULL;
-    else
+    if (totalDataSize != -1)
     {
-        Response * res = new Response(rawData);
+        isSuccess = true;
+        res = (Response *)(new ResponseTCP(rawData));
+    }
+    if (rawData != NULL)
         delete [] rawData;
-        return res;
-    }
+    return isSuccess;
 }
 
-Response *ClientW::receiveTCP()
+// UDP
+
+ClientWUDP::ClientWUDP(const char * servIp, int port)
+    : ClientW(servIp, port)
 {
-    return receiveData(tcpSock);
+    sock = socket(PF_INET, SOCK_DGRAM, 0);
 }
 
-Response *ClientW::receiveUDP()
+int ClientWUDP::receiveBytes(char * & rawData)
 {
-    return receiveData(udpSock);
+    int readBytes = -1;
+    int packetSize = sizeof(int) + sizeof(int) + 1024;
+
+    rawData = new char[packetSize];
+
+    readBytes = recv(sock, rawData, packetSize, 0);
+
+    return readBytes;
 }
 
-int ClientW::sendBytes(SOCKET sock, const char *totalBytes, const int totalSize)
+bool ClientWUDP::receiveData(Response * & res)
 {
-    int totalDataSize = -1;
-    int writeBytes = send(sock, (char *)&totalSize, sizeof(int), 0);
-    if (writeBytes != -1)
+    char * rawData = NULL;
+    bool isSuccess = false;
+    int totalDataSize = receiveBytes(rawData);
+
+    if (totalDataSize != -1)
     {
-        for (int i = 0; i < totalSize; i += 1024)
-        {
-            writeBytes = send(sock, totalBytes + i, (i + 1024 < totalSize) ? 1024 : totalSize - i, 0);
-            if (writeBytes == -1)
-            {
-                return -1;
-            }
-            totalDataSize += writeBytes;
-        }
+        isSuccess = true;
+        res = (Response *)(new ResponseUDP(rawData, totalDataSize));
     }
-    return totalDataSize;
+    if (rawData != NULL)
+        delete [] rawData;
+    return isSuccess;
 }
 
-bool ClientW::sendData(SOCKET sock, Request &req)
+int ClientWUDP::sendBytes(const char *headerBytes, const int headerSize, const char *dataBytes, const int dataSize)
 {
-    int totalDataSize = sendBytes(sock, req.TotalBytes(), req.TotalSize());
+    int dataCount = dataSize / 1024 + ((dataSize % 1024 == 0) ? 0 : 1);
+    int packetDataSize = -1;
+    int packetSize = -1;
 
-    if (totalDataSize == -1)
-        return false;
-    else
-        return true;
+    for (int i = 0; i < dataCount; i++)
+    {
+        packetDataSize = (i < dataSize / 1024) ? 1024 : dataSize % 1024;
+        packetSize = headerSize + sizeof(int) + packetDataSize;
+
+        char * packet = new char[packetSize];
+
+        memcpy(packet, headerBytes, headerSize);
+        memcpy(packet + headerSize, (char *)&i, sizeof(int));
+        memcpy(packet + headerSize + sizeof(int) , dataBytes + (1024 * i), packetDataSize);
+
+        if (send(sock, packet, packetSize, 0) == SOCKET_ERROR)
+            dataCount = -1;
+
+        delete [] packet;
+
+        if (dataCount == -1)
+            break;
+    }
+    return dataCount;
 }
-
-bool ClientW::sendTCP(Request &req)
-{
-    return sendData(tcpSock, req);
-}
-
-bool ClientW::sendUDP(Request &req)
-{
-    return sendData(udpSock, req);
-}
-
-
-
-

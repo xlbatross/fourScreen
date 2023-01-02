@@ -4,8 +4,10 @@
 #include <QWidget>
 #include <QMessageBox>
 #include <QDebug>
-//#include "clientw.h"
-#include "clientl.h"
+#include <QTimer>
+#include <opencv2/opencv.hpp>
+#include "clientw.h"
+//#include "clientl.h"
 #include "receivethread.h"
 
 QT_BEGIN_NAMESPACE
@@ -23,13 +25,30 @@ public:
 private:
     Ui::MainWidget *ui;
 
-//    ClientW * client;
-    ClientLTCP * clientTCP;
-    ClientLUDP * clientUDP;
+    ClientW * clientTCP;
+    ClientW * clientUDP;
+//    ClientL * clientTCP;
+//    ClientL * clientUDP;
 
-    ReceiveThread * recvThread;
+    char * first;
+    vector<int> firstNumList;
+    char * second;
+    vector<int> secondNumList;
+    char * third;
+    vector<int> thirdNumList;
+    char * fourth;
+    vector<int> fourthNumList;
+
+    ReceiveThread * recvTCPThread;
+    ReceiveThread * recvUDPThread;
+
+    QTimer * timer;
+
+    cv::VideoCapture cap;
 
 private slots:
+    void sendImage();
     void responseChat(ResChat);
+    void responseImage(ResponseUDP);
 };
 #endif // MAINWIDGET_H

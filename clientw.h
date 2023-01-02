@@ -3,37 +3,52 @@
 
 #include <string.h>
 #include <winsock2.h>
-#include "response.h"
 #include "request.h"
+#include "response.h"
 
 class ClientW
 {
 public:
-    explicit ClientW(const char * servIp = "127.0.0.1", int port = 2500);
+    explicit ClientW(const char * servIp, int port);
     ~ClientW();
 
-    bool connectServer();
+    string sockIp();
+    int sockPort();
 
-    int receiveBytes(SOCKET sock, char * & rawData);
-    Response *receiveData(SOCKET sock);
-    Response *receiveTCP();
-    Response *receiveUDP();
+    virtual bool connectServer();
+    virtual int receiveBytes(char * & rawData) = 0;
+    virtual bool receiveData(Response * & res) = 0;
+    virtual int sendBytes(const char * headerBytes, const int headerSize, const char * dataBytes, const int dataSize) = 0;
+    virtual bool sendData(Request & req);
 
-    int sendBytes(SOCKET sock, const char * totalBytes, const int totalSize);
-    bool sendData(SOCKET sock, Request & req);
-    bool sendTCP(Request & req);
-    bool sendUDP(Request & req);
-
-private:
+protected:
     WSADATA wsaData;
 
-    SOCKET tcpSock;
-    SOCKET udpSock;
+    SOCKET sock;
+    SOCKADDR_IN myAdr;
+    SOCKADDR_IN servAdr;
 
-    SOCKADDR_IN servTcpAdr;
-    SOCKADDR_IN servUdpAdr;
-    SOCKADDR_IN fromUdpAdr;
+    bool setSockInfo();
+};
 
+class ClientWTCP : public ClientW
+{
+public:
+    explicit ClientWTCP(const char * servIp, int port);
+
+    int receiveBytes(char * & rawData) override;
+    bool receiveData(Response * & res) override;
+    int sendBytes(const char * headerBytes, const int headerSize, const char * dataBytes, const int dataSize) override;
+};
+
+class ClientWUDP : public ClientW
+{
+public:
+    explicit ClientWUDP(const char * servIp, int port);
+
+    int receiveBytes(char * & rawData) override;
+    bool receiveData(Response * & res) override;
+    int sendBytes(const char * headerBytes, const int headerSize, const char * dataBytes, const int dataSize) override;
 };
 
 #endif // CLIENTW_H

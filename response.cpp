@@ -59,7 +59,7 @@ ResChat::ResChat()
 
 ResChat::ResChat(ResponseTCP *restcp)
 {
-    msg = string(restcp->DataBytesList()[0].data(), restcp->DataBytesList()[0].size());
+    msg.append(restcp->DataBytesList()[0].data(), restcp->DataBytesList()[0].size());
 }
 
 const string ResChat::Msg()
@@ -69,7 +69,12 @@ const string ResChat::Msg()
 // tcp end
 
 // udp start
-ResponseUDP::ResponseUDP(const char *rawData)
+ResponseUDP::ResponseUDP()
+{
+
+}
+
+ResponseUDP::ResponseUDP(const char *rawData, const int totalDataSize)
 {
     int pointer = 0;
 
@@ -79,8 +84,8 @@ ResponseUDP::ResponseUDP(const char *rawData)
     memcpy(&seqNum, rawData + pointer, sizeof(int));
     pointer += sizeof(int);
 
-    vector<char> dataBytes(1024);
-    std::copy(rawData + pointer, rawData + pointer + 1024, dataBytes.begin());
+    vector<char> dataBytes(totalDataSize - pointer);
+    std::copy(rawData + pointer, rawData + totalDataSize, dataBytes.begin());
     dataBytesList.push_back(dataBytes);
 }
 
@@ -88,7 +93,6 @@ const int ResponseUDP::SeqNum()
 {
     return seqNum;
 }
-
 // udp end
 
 

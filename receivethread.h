@@ -2,17 +2,16 @@
 #define RECEIVETHREAD_H
 
 #include <QThread>
-//#include "clientw.h"
-#include "clientl.h"
-
+#include "clientw.h"
+//#include "clientl.h"
 
 class ReceiveThread : public QThread
 {
     Q_OBJECT
 public:
     explicit ReceiveThread(
-//            ClientW * client,
-            ClientL * client,
+            ClientW * client,
+//            ClientL * client,
             QObject *parent = nullptr
    );
 
@@ -22,11 +21,12 @@ public:
 
 private:
     bool isRunning;
-//    ClientW * client;
-    ClientL * client;
+    ClientW * client;
+//    ClientL * client;
 
 signals:
     void responseChat(ResChat);
+    void responseImage(ResponseUDP);
 };
 
 #endif // RECEIVETHREAD_H
